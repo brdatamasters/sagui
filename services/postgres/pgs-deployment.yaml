@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  #securityContext:
+  #  fsGroup: 0
+  #  runAsUser: 0
+  replicas: 1
+  selector:
+    matchLabels:
+      deploy: postgres
+  template:
+    metadata:
+      labels:
+        name: postgres
+        deploy: postgres
+    spec:
+      restartPolicy: Always
+      containers:
+        - name: postgres
+          image: postgres:13.1-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              protocol: TCP
+          volumeMounts:
+            - name: dbvol
+              mountPath: /var/lib/postgresql/data/pgdata
+              subPath: pgdata
+          env: 
+            - name: POSTGRES_USER
+              value: airflow
+            - name: POSTGRES_PASSWORD
+              value: airflow
+            - name: POSTGRES_DB
+              value: airflow
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            limits:
+              cpu: "0.8"
+              memory: 0.8Gi
+            requests:
+              memory: .5Gi
+              cpu: ".5"
+      volumes:
+        - name: dbvol
+          persistentVolumeClaim:
+              claimName: pv-claim-postgres
