@@ -3,9 +3,6 @@ kind: Deployment
 metadata:
   name: postgres
 spec:
-  #securityContext:
-  #  fsGroup: 0
-  #  runAsUser: 0
   replicas: 1
   selector:
     matchLabels:
@@ -24,27 +21,32 @@ spec:
           ports:
             - containerPort: 5432
               protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: postgres-secret
           volumeMounts:
-            - name: dbvol
-              mountPath: /var/lib/postgresql/data/pgdata
-              subPath: pgdata
+            - mountPath: /mnt/azure
+              name: volume
+          #volumeMounts:
+          #  - name: azure
+          #    mountPath: /var/postgresql
+          #    subPath: pgdata
           env: 
-            - name: POSTGRES_USER
-              value: airflow
-            - name: POSTGRES_PASSWORD
-              value: airflow
-            - name: POSTGRES_DB
-              value: airflow
             - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
+              value: /var/postgresql/data
           resources:
             limits:
               cpu: "0.8"
-              memory: 0.8Gi
+              memory: "1024M"
             requests:
-              memory: .5Gi
+              memory: "512M"
               cpu: ".5"
+      #volumes:
+      #  - name: azure
+      #    persistentVolumeClaim:
+      #        claimName: pv-claim-postgres
+
       volumes:
-        - name: dbvol
+        - name: volume
           persistentVolumeClaim:
-              claimName: pv-claim-postgres
+            claimName: azurefile
