@@ -14,18 +14,18 @@ spec:
   csi:
     driver: file.csi.azure.com
     readOnly: false
-    volumeHandle: unique-volumeid  # make sure this volumeid is unique for every identical share in the cluster
+    volumeHandle: aks-labs#sbxaksfileshare  # make sure this volumeid is unique for every identical share in the cluster
     volumeAttributes:
-      resourceGroup: airflow-dbt-lab  # optional, only set this when storage account is not in the same resource group as node
-      shareName: kubefileshare
+      resourceGroup: aks-labs  # optional, only set this when storage account is not in the same resource group as node
+      shareName: aksfileshare
     nodeStageSecretRef:
-      name: azure-secret
+      name: aks-fileshare-secret
       namespace: default
   mountOptions:
     - dir_mode=0777
     - file_mode=0777
-    - uid=0
-    - gid=0
+    - uid=1001
+    - gid=1001
     - mfsymlinks
     - cache=strict
     - nosharesock

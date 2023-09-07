@@ -1,0 +1,156 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: airflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      deploy: airflow
+  template:
+    metadata:
+      labels:
+        deploy: airflow
+    spec:
+      securityContext:
+        fsGroup: 0
+        runAsUser: 0
+      containers:
+      - name: airflow-web
+        env: 
+          - name: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+            value: "postgresql://airflow:airflow@postgres:5432/airflow"
+          - name: AIRFLOW__CORE__DAGS_FOLDER
+            value: "/opt/airflow/dags/git"
+          - name: AIRFLOW__CORE__LOAD_EXAMPLES
+            value: "False"
+          - name: AIRFLOW__CORE__EXECUTOR
+            valueFrom:
+              configMapKeyRef:
+                name: airflow-config
+                key: executor #KubernetesExecutor
+          - name: AIRFLOW__LOGGING__BASE_LOG_FOLDER
+            value: "/opt/airflow/logs"
+          - name: AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER
+            value: "wasb-airflowlogs@saairflow.blob.core.windows.net" 
+          - name: AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID
+            value: "AzureAirflowLog"  # remote_logging
+          - name: AIRFLOW__LOGGING__REMOTE_LOGGING
+            value: "True"
+          - name: AIRFLOW__LOGGING__LOGGING_CONFIG_CLASS
+            value: log_config.DEFAULT_LOGGING_CONFIG
+        image: acrcalixto.azurecr.io/airflow:v31 # apache/airflow:2.0.0-python3.8-build
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: airflow-dags
+          mountPath: /opt/airflow/dags
+        - name: airflow-logs
+          mountPath: /opt/airflow/logs
+        command: ["/bin/sh","-c"]
+        args: ["airflow db upgrade && airflow users create \
+                --username admin \
+                --firstname Felipe \
+                --lastname Calixto \
+                --role Admin \
+                --password admin \
+                --email felipe@calixtoconsultoria.com.br \
+                && airflow webserver"]
+        resources:
+          limits:
+            memory: 1Gi
+            cpu: "1"
+      - name: airflow-scheduler
+        env:
+          - name: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+            value: "postgresql://airflow:airflow@postgres:5432/airflow"
+          - name: AIRFLOW__CORE__DAGS_FOLDER
+            value: "/opt/airflow/dags/git"
+          - name: AIRFLOW__KUBERNETES__WORKER_CONTAINER_REPOSITORY
+            value: "acrcalixto.azurecr.io/airflow" # "apache/airflow"
+          - name: AIRFLOW__KUBERNETES__WORKER_CONTAINER_TAG
+            value: "v31" # "2.0.0-python3.8-build"
+          - name: AIRFLOW__KUBERNETES__POD_TEMPLATE_FILE
+            value: "/opt/airflow/worker-pod-doc.yaml"
+          - name: AIRFLOW__KUBERNETES__DELETE_WORKER_PODS
+            value: "True"
+          - name: AIRFLOW__LOGGING__BASE_LOG_FOLDER
+            value: "/opt/airflow/logs"
+            # variables logging
+          - name: AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER
+            value: "wasb-airflowlogs@saairflow.blob.core.windows.net"  
+          - name: AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID
+            value: "AzureAirflowLog"  # remote_logging
+          - name: AIRFLOW__LOGGING__REMOTE_LOGGING
+            value: "True"
+          - name: AIRFLOW__LOGGING__LOGGING_CONFIG_CLASS
+            value: log_config.DEFAULT_LOGGING_CONFIG
+          - name: AIRFLOW__CORE__LOGGING_LEVEL
+            value: "DEBUG"
+          - name: AIRFLOW__CORE__FAB_LOGGING_LEVEL
+            value: "DEBUG"
+        image:  acrcalixto.azurecr.io/airflow:v31 #apache/airflow:2.0.0-python3.8-build
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: airflow-dags
+          mountPath: /opt/airflow/dags
+        - name: airflow-logs
+          mountPath: /opt/airflow/logs
+        command: ["/bin/sh","-c"]
+        args: ["airflow db init && airflow scheduler"]
+        resources:
+          limits:
+            memory: 0.5Gi
+            cpu: "0.3"
+      - name: git-sync
+        image: k8s.gcr.io/git-sync:v3.1.5
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: GIT_SYNC_REPO
+            value: "https://github.com/calixtofelipe/gitsync-dags"
+          - name: GIT_SYNC_BRANCH
+            value: "master"
+          - name: GIT_SYNC_ROOT
+            value: /opt/airflow/dags 
+          - name: GIT_SYNC_DEST
+            value: "git"
+          - name: GIT_SYNC_USERNAME
+            valueFrom:
+              configMapKeyRef:
+                name: airflow-config
+                key: git_sync_username
+          - name: GIT_SYNC_PASSWORD
+            valueFrom:
+              configMapKeyRef:
+                name: airflow-config
+                key: git_sync_password
+          - name: GIT_SYNC_WAIT
+            value: "60"
+          - name: GIT_SYNC_ONE_TIME
+            value: "False"
+          - name: GIT_SYNC_PERMISSIONS
+            value: "777"
+          - name: AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL
+            value: "60"
+          - name: GIT_SYNC_DEPTH
+            value: "1"
+          - name: GIT_KNOWN_HOSTS
+            value: "false"
+        volumeMounts:
+        - name: airflow-dags
+          mountPath: /opt/airflow/dags
+        resources:
+          limits:
+            memory: 0.128Gi
+            cpu: "0.1"      
+      imagePullSecrets:
+      - name: azure-registry-secret
+      restartPolicy: Always
+      volumes:
+      - name: airflow-dags
+        persistentVolumeClaim:
+          claimName: task-pv-claim
+      - name: airflow-logs
+        persistentVolumeClaim:
+          claimName: pv-claim-log
